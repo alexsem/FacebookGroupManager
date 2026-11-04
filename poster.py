@@ -11,7 +11,7 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Sequence
 
 from playwright.sync_api import sync_playwright, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 
@@ -185,14 +185,52 @@ class FacebookGroupPoster:
                 return True
         return False
 
+    def _wait_for_media_upload(self, max_wait_sec: int = 60) -> None:
+        """Wait for Facebook to process media upload (photos/videos)."""
+        if not self.page:
+            return
+        logger.info("Waiting for media files to finish uploading...")
+        time.sleep(2.5)
+        start_time = time.time()
+
+        post_btn_selectors = [
+            'div[role="dialog"] div[aria-label="Publicar"][role="button"]',
+            'div[role="dialog"] div[aria-label="Post"][role="button"]',
+            'div[role="dialog"] div[role="button"]:has-text("Publicar")',
+            'div[role="dialog"] div[role="button"]:has-text("Post")',
+        ]
+
+        while time.time() - start_time < max_wait_sec:
+            try:
+                progressbar = self.page.locator('div[role="dialog"] [role="progressbar"]').first
+                if progressbar.is_visible(timeout=500):
+                    time.sleep(2.0)
+                    continue
+            except Exception:
+                pass
+
+            for sel in post_btn_selectors:
+                try:
+                    btn = self.page.locator(sel).first
+                    if btn.is_visible(timeout=500):
+                        disabled = btn.get_attribute("aria-disabled")
+                        if disabled not in ("true", "1"):
+                            logger.info("Media upload completed and submit button is enabled.")
+                            time.sleep(1.0)
+                            return
+                except Exception:
+                    pass
+            time.sleep(1.5)
+
     def post_to_group(
         self,
         group_url: str,
         message: str,
+        media_paths: Optional[Sequence[Path]] = None,
         image_path: Optional[Path] = None,
         dry_run: bool = False,
     ) -> PostResult:
-        """Post a message and optional image to a specific Facebook group URL."""
+        """Post a message and optional media (images and/or videos) to a specific Facebook group."""
         assert self.page is not None
         logger.info(f"Navigating to group: {group_url}")
 
@@ -298,26 +336,44 @@ class FacebookGroupPoster:
             self._type_human_like(message)
             time.sleep(random.uniform(1.5, 3.0))
 
-            # Handle optional image attachment
-            if image_path and image_path.exists():
-                logger.info(f"Attaching image from {image_path}...")
+            # Handle optional media attachment (photos and/or videos)
+            all_media: list[Path] = []
+            if media_paths:
+                all_media.extend([p for p in media_paths if p and p.exists()])
+            elif image_path and image_path.exists():
+                all_media.append(image_path)
+
+            if all_media:
+                media_file_paths = [str(p.resolve()) for p in all_media]
+                logger.info(
+                    f"Attaching {len(media_file_paths)} media file(s) to post: {[p.name for p in all_media]}..."
+                )
                 try:
-                    file_input = self.page.locator('div[role="dialog"] input[type="file"]').first
-                    if file_input.count() > 0:
-                        file_input.set_input_files(str(image_path))
-                        time.sleep(3.0)
-                    else:
-                        photo_btn = self.page.locator(
-                            'div[role="dialog"] div[aria-label*="Foto" i], div[role="dialog"] div[aria-label*="Photo" i]'
-                        ).first
-                        if photo_btn.is_visible(timeout=3000):
+                    photo_btn = self.page.locator(
+                        'div[role="dialog"] div[aria-label*="Foto" i], '
+                        'div[role="dialog"] div[aria-label*="Photo" i], '
+                        'div[role="dialog"] div[aria-label*="video" i]'
+                    ).first
+
+                    if photo_btn.is_visible(timeout=3000):
+                        try:
                             with self.page.expect_file_chooser(timeout=5000) as fc_info:
                                 photo_btn.click()
                             file_chooser = fc_info.value
-                            file_chooser.set_files(str(image_path))
-                            time.sleep(3.0)
-                except Exception as img_err:
-                    logger.warning(f"Could not attach image: {img_err}")
+                            file_chooser.set_files(media_file_paths)
+                        except Exception:
+                            file_input = self.page.locator('div[role="dialog"] input[type="file"]').first
+                            if file_input.count() > 0:
+                                file_input.set_input_files(media_file_paths)
+                    else:
+                        file_input = self.page.locator('div[role="dialog"] input[type="file"]').first
+                        if file_input.count() > 0:
+                            file_input.set_input_files(media_file_paths)
+
+                    # Wait for media files to complete upload before continuing
+                    self._wait_for_media_upload()
+                except Exception as media_err:
+                    logger.warning(f"Could not attach media files: {media_err}")
 
             if dry_run:
                 logger.info("[DRY RUN] Simulating post submission (not clicking Post).")
@@ -401,6 +457,7 @@ class FacebookGroupPoster:
         self,
         manager: GroupBatchManager,
         message: str,
+        media_paths: Optional[Sequence[Path]] = None,
         image_path: Optional[Path] = None,
         dry_run: bool = False,
     ) -> None:
@@ -432,6 +489,7 @@ class FacebookGroupPoster:
                     result = self.post_to_group(
                         group_url=group_url,
                         message=message,
+                        media_paths=media_paths,
                         image_path=image_path,
                         dry_run=dry_run,
                     )

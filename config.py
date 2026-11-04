@@ -28,6 +28,7 @@ class PosterConfig:
     # Paths
     user_data_dir: Path = BASE_DIR / os.getenv("FB_USER_DATA_DIR", "fb_user_data")
     groups_file: Path = BASE_DIR / os.getenv("FB_GROUPS_FILE", "groups.txt")
+    post_dir: Path = BASE_DIR / os.getenv("FB_POST_DIR", "post_data")
     post_file: Path = BASE_DIR / os.getenv("FB_POST_FILE", "post_content.txt")
     history_file: Path = BASE_DIR / os.getenv("FB_HISTORY_FILE", "post_history.json")
     image_path: Path | None = (
@@ -47,3 +48,12 @@ class PosterConfig:
 
     # Anti-bot options
     human_typing: bool = os.getenv("FB_HUMAN_TYPING", "true").lower() in ("true", "1", "yes")
+
+    @property
+    def resolved_post_dir(self) -> Path:
+        """Resolve post bundle directory, falling back to BASE_DIR if post_data does not exist."""
+        if self.post_dir.exists() and self.post_dir.is_dir():
+            return self.post_dir
+        if (BASE_DIR / "post_content.txt").exists():
+            return BASE_DIR
+        return self.post_dir
