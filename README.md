@@ -1,99 +1,128 @@
 # Facebook Group Batch Poster con Playwright
 
-Script en Python modular y orientado a objetos para publicar en múltiples grupos de Facebook (100+ grupos) divididos en tandas (por defecto tandas de 10), con control de cadencia, reanudación automática, perfil persistente y soporte para carpetas de contenido (texto + imágenes + videos).
+Script en Python modular y orientado a objetos para publicar en múltiples grupos de Facebook (100+ grupos) divididos en tandas (por defecto lotes de 10), con control de cadencia humana, reanudación automática, perfil persistente y soporte para paquetes de contenido (texto + múltiples imágenes + videos en una misma publicación).
 
 ---
 
-## 🚀 Características
+## ⚡ Comandos Rápidos (Copiar y Pegar)
 
-- **Publicación por Tandas (Batches)**: Divide la lista de grupos en lotes de 10 grupos (configurable en `.env`).
-- **Paquete de Contenido Unificado (Directorio de Post)**: En lugar de archivos sueltos, indicas una carpeta con `--path` donde colocas `post_content.txt` junto con todas las imágenes y videos que van en el mismo post.
-- **Soporte Multimedia Combinado**: Adjunta múltiples imágenes (.jpg, .jpeg, .png, etc.) y/o videos (.mp4, .mov, etc.) a la misma publicación con detección de carga en Facebook.
-- **Generadores de Memoria Eficiente**: Lectura de archivos y streaming de grupos mediante generadores (`yield`) para evitar consumo excesivo de memoria.
-- **Perfil de Navegador Persistente**: Inicias sesión manualmente una sola vez (`--login`) con soporte de 2FA. Tu sesión queda guardada localmente en la carpeta `fb_user_data/` y no expones contraseñas en código.
-- **Evasión de Detección Anti-Bot**:
-  - Tipeo con variaciones de tiempo humano entre caracteres (`FB_HUMAN_TYPING`).
-  - Esperas aleatorias configurables entre publicaciones (ej. 45 a 90 segundos).
-  - Tiempo de enfriamiento (cooldown) entre tandas (ej. 10 minutos entre cada tanda de 10 grupos).
-  - Detección de bloqueos de acción y detención de emergencia para resguardar la cuenta.
-- **Historial y Reanudación Automática (`post_history.json`)**: Si el proceso se interrumpe, al volver a ejecutarlo continuará solo con los grupos pendientes sin repetir los ya publicados.
+> Abre tu terminal de PowerShell en la carpeta del proyecto (`d:\OneDrive\Documentos\Scripts`) antes de ejecutar:
 
----
-
-## 📁 Estructura del Proyecto
-
-- [`main.py`](file:///d:/OneDrive/Documentos/Scripts/main.py): Interfaz CLI principal con comandos `--login`, `--run`, `--dry-run`, `--single`, `--path`.
-- [`post_bundle.py`](file:///d:/OneDrive/Documentos/Scripts/post_bundle.py): Clases `PostBundle` y `PostBundleLoader` que descubren el texto y los archivos multimedia (fotos/videos) en una carpeta.
-- [`poster.py`](file:///d:/OneDrive/Documentos/Scripts/poster.py): Clase `FacebookGroupPoster` encargada de interactuar con el DOM de Facebook mediante Playwright y esperar la subida multimedia.
-- [`batch_manager.py`](file:///d:/OneDrive/Documentos/Scripts/batch_manager.py): Clase `GroupBatchManager` que gestiona el streaming por tandas y el estado en JSON.
-- [`config.py`](file:///d:/OneDrive/Documentos/Scripts/config.py): Carga y validación de variables de entorno desde `.env` o `.env.local`.
-- [`post_data/`](file:///d:/OneDrive/Documentos/Scripts/post_data): Carpeta por defecto con `post_content.txt` y archivos multimedia.
-- [`groups.txt`](file:///d:/OneDrive/Documentos/Scripts/groups.txt): Archivo de entrada con las URLs de los grupos de Facebook (una por línea).
-- [`.env`](file:///d:/OneDrive/Documentos/Scripts/.env): Variables de configuración de tiempos, tandas y opciones.
-
----
-
-## 🛠️ Instalación y Requisitos
-
-El entorno virtual ya fue inicializado con `uv` en `.venv` con Python 3.12 y los navegadores de Playwright instalados.
-
-Para activar el entorno virtual en PowerShell:
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Si necesitas reinstalar dependencias o navegadores en otra máquina:
-```powershell
-uv pip install -r requirements.txt
-playwright install chromium
-```
-
----
-
-## 📋 Guía de Uso Paso a Paso
-
-### 1. Iniciar Sesión por Primera Vez (Login Persistente)
-
-Ejecuta el siguiente comando para abrir el navegador Chromium y guardar tu sesión:
-
+### 1. Iniciar sesión por primera vez (Solo se hace una vez)
+Abre Chrome nativo para ingresar con tu cuenta y guardar la sesión persistente en `fb_user_data/`:
 ```powershell
 .venv\Scripts\python.exe main.py --login
 ```
 
-1. Se abrirá una ventana de Facebook.
-2. Ingresa tu correo, contraseña y código de autenticación en dos pasos (2FA) si lo tienes habilitado.
-3. Una vez que estés en tu muro o feed principal de Facebook, regresa a la consola y presiona `ENTER`.
-4. La sesión quedará guardada de forma segura en `fb_user_data/` (ignorado por Git).
-
 ---
 
-### 2. Preparar tu Contenido (Carpeta con Texto + Imágenes/Videos)
-
-Crea una carpeta (o usa la carpeta por defecto [`post_data/`](file:///d:/OneDrive/Documentos/Scripts/post_data)) y coloca dentro:
-1. `post_content.txt`: con el mensaje de la publicación.
-2. Cualquier imagen (.jpg, .png, etc.) y/o video (.mp4, .mov, etc.) que quieras adjuntar al post. Todos los archivos multimedia dentro de esa carpeta se subirán juntos al mismo post.
-
----
-
-### 3. Probar en un Solo Grupo (Dry Run o Real)
-
-Para verificar que los selectores y la subida de fotos/videos funcionen correctamente sin riesgo:
-
+### 2. Probar en un solo grupo (Simulación / Dry-Run)
+Navega al grupo, escribe el texto y adjunta la foto y el video, pero **no hace clic en Publicar**:
 ```powershell
-# Modo simulación (escribe el post y adjunta los archivos, pero NO hace clic en "Publicar"):
-.venv\Scripts\python.exe main.py --single "https://www.facebook.com/groups/TU_GRUPO/" --path "post_data" --dry-run
-
-# O prueba de publicación real en un solo grupo:
-.venv\Scripts\python.exe main.py --single "https://www.facebook.com/groups/TU_GRUPO/" --path "post_data"
+.venv\Scripts\python.exe main.py --single "https://www.facebook.com/groups/1887266828711361/" --path "moto_electrica_uruz" --dry-run
 ```
 
 ---
 
-### 4. Ejecutar la Campaña por Tandas
-
-Para iniciar la publicación en todos los grupos de [`groups.txt`](file:///d:/OneDrive/Documentos/Scripts/groups.txt) divididos en lotes de 10:
-
+### 3. Publicar de verdad en un solo grupo
+Realiza la publicación efectiva en ese grupo específico:
 ```powershell
-.venv\Scripts\python.exe main.py --run --path "post_data"
+.venv\Scripts\python.exe main.py --single "https://www.facebook.com/groups/1887266828711361/" --path "moto_electrica_uruz"
 ```
-*(Si no pasas `--path`, usará automáticamente la carpeta configurada en `FB_POST_DIR` dentro de `.env`, que por defecto es `post_data`).*
+
+---
+
+### 4. Simulación de la campaña completa (Dry-Run en todos los grupos)
+Recorre todos los grupos de `groups.txt` simulando la carga en cada uno sin publicar:
+```powershell
+.venv\Scripts\python.exe main.py --run --path "moto_electrica_uruz" --dry-run
+```
+
+---
+
+### 5. Lanzar la campaña real en todos los grupos (Por tandas)
+Publica automáticamente en todos los grupos configurados en `groups.txt` con pausas anti-bot y cooldown entre tandas:
+```powershell
+.venv\Scripts\python.exe main.py --run --path "moto_electrica_uruz"
+```
+
+---
+
+### 6. Ejecución con opciones avanzadas
+
+* **Cambiar el tamaño de la tanda a 5 grupos (en vez de 10):**
+  ```powershell
+  .venv\Scripts\python.exe main.py --run --path "moto_electrica_uruz" --batch-size 5
+  ```
+
+* **Usar una lista de grupos alternativa:**
+  ```powershell
+  .venv\Scripts\python.exe main.py --run --path "moto_electrica_uruz" --groups-file "mis_otros_grupos.txt"
+  ```
+
+* **Ejecutar con la carpeta de post por defecto (`post_data/`):**
+  ```powershell
+  .venv\Scripts\python.exe main.py --run
+  ```
+
+* **Ver el menú de ayuda con todos los parámetros disponibles:**
+  ```powershell
+  .venv\Scripts\python.exe main.py --help
+  ```
+
+---
+
+## 📁 Cómo Estructurar una Carpeta de Publicación
+
+Puedes crear cualquier carpeta (como `moto_electrica_uruz/` o `post_data/`) con la siguiente estructura:
+
+```text
+nombre_de_tu_carpeta/
+├── post_content.txt        <-- Texto del mensaje (soporta emojis y saltos de línea)
+├── foto_1.jpeg             <-- Imagen (JPG, PNG, WebP)
+├── foto_2.png              <-- Más imágenes (opcional)
+└── video_demo.mp4          <-- Video (MP4, MOV, MKV, etc.)
+```
+
+> **Nota:** Todos los archivos de imagen y video dentro de la carpeta se adjuntan **a la misma publicación**. El script detecta el progreso de subida de Facebook y espera automáticamente a que el video y fotos terminen de procesarse antes de continuar.
+
+---
+
+## ⚙️ Configuración y Variables de Entorno (`.env`)
+
+En el archivo [`.env`](file:///d:/OneDrive/Documentos/Scripts/.env) puedes ajustar el comportamiento del bot:
+
+| Variable | Descripción | Valor por Defecto |
+| :--- | :--- | :--- |
+| `FB_POST_DIR` | Carpeta con texto y multimedia si no usas `--path` | `post_data` |
+| `FB_GROUPS_FILE` | Archivo con las URLs de grupos de Facebook | `groups.txt` |
+| `FB_USER_DATA_DIR` | Directorio donde se guarda la sesión de Chrome | `fb_user_data` |
+| `FB_HISTORY_FILE` | Archivo donde se registra el progreso | `post_history.json` |
+| `FB_BATCH_SIZE` | Cantidad de grupos por tanda | `10` |
+| `FB_MIN_POST_DELAY` | Espera mínima entre publicaciones (segundos) | `45` |
+| `FB_MAX_POST_DELAY` | Espera máxima entre publicaciones (segundos) | `90` |
+| `FB_BATCH_COOLDOWN` | Pausa de descanso entre tandas (segundos: 600 = 10 min) | `600` |
+| `FB_HEADLESS` | `false` para ver el navegador, `true` para segundo plano | `false` |
+| `FB_HUMAN_TYPING` | Simular tipeo humano con variaciones de tiempo | `true` |
+
+---
+
+## 🔄 Reanudación Automática e Historial
+
+Cada vez que un grupo se procesa exitosamente (o queda pendiente de aprobación del administrador), se registra en [`post_history.json`](file:///d:/OneDrive/Documentos/Scripts/post_history.json).
+
+* **Si la ejecución se interrumpe** (por corte de luz, cierre manual, etc.), al volver a ejecutar el comando `--run` continuará **únicamente con los grupos pendientes**, sin repetir los que ya fueron publicados.
+* **Si deseas volver a publicar en todos los grupos desde cero**, simplemente elimina o renombra el archivo `post_history.json`:
+  ```powershell
+  Remove-Item post_history.json -ErrorAction SilentlyContinue
+  ```
+
+---
+
+## 🛡️ Medidas de Seguridad Anti-Bloqueo Integradas
+
+1. **Perfil persistente (`fb_user_data/`):** Utiliza cookies y tokens reales de tu Chrome habitual sin exponer contraseñas en scripts.
+2. **Sin indicadores de automatización:** Se eliminaron las banderas `--enable-automation` y `--no-sandbox` para evitar alertas en Meta.
+3. **Pausas aleatorias (Jitter):** Espera entre 45 y 90 segundos entre cada post simulando comportamiento humano.
+4. **Pausa entre tandas (Cooldown):** Descanso configurable (10 minutos por defecto) cada 10 grupos para evitar límites de cadencia de Facebook.
+5. **Detección de rate limits:** Si Facebook muestra un aviso de acción bloqueada o límite temporal, el script se detiene de inmediato automáticamente para resguardar la cuenta.
