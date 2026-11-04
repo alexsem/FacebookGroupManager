@@ -7,7 +7,9 @@ and batch posting across Facebook groups.
 from __future__ import annotations
 
 import logging
+import os
 import random
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,11 +59,9 @@ class FacebookGroupPoster:
             f"Launching browser with profile at: {self.config.user_data_dir} (headless={is_headless})"
         )
 
+        # Clean flags without --no-sandbox to avoid Chrome security and WebAuthn warnings
         args = [
             "--disable-blink-features=AutomationControlled",
-            "--disable-infobars",
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
         ]
 
         launch_kwargs = {
@@ -102,33 +102,71 @@ class FacebookGroupPoster:
             self.playwright = None
         logger.info("Browser session closed.")
 
+    @staticmethod
+    def _find_chrome_executable() -> Optional[Path]:
+        """Find local Google Chrome executable on Windows."""
+        local_app = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+            Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+            Path(local_app) / "Google" / "Chrome" / "Application" / "chrome.exe" if local_app else None,
+        ]
+        for c in candidates:
+            if c and c.exists():
+                return c
+        return None
+
     def run_login_flow(self) -> bool:
-        """Open browser to Facebook and pause so the user can log in manually."""
-        logger.info("Opening Facebook for manual login...")
-        self.start_session(force_visible=True)
+        """Open browser for initial manual Facebook login with full 2FA support."""
+        profile_dir = self.config.user_data_dir.resolve()
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        chrome_exe = self._find_chrome_executable()
+
+        print("\n" + "=" * 65)
+        print("INICIO DE SESIÓN MANUAL EN FACEBOOK (2FA / SEGURO)")
+        print("Se abrirá una ventana de Google Chrome con tu perfil.")
+        print("1. Ingresa tu correo y contraseña.")
+        print("2. Resuelve el 2FA (código, SMS o aprobación en celular).")
+        print("3. Una vez que veas tu muro o feed principal de Facebook:")
+        print("   -> Cierra la ventana de Chrome.")
+        print("   -> Regresa a esta terminal y presiona [ENTER].")
+        print("=" * 65 + "\n")
+
+        if chrome_exe:
+            logger.info(f"Iniciando Google Chrome nativo: {chrome_exe}")
+            proc = subprocess.Popen([
+                str(chrome_exe),
+                f"--user-data-dir={profile_dir}",
+                "https://www.facebook.com/",
+            ])
+            input("Presiona [ENTER] después de iniciar sesión y cerrar la ventana de Chrome... ")
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        else:
+            logger.info("Chrome nativo no encontrado, iniciando sesión con Playwright...")
+            self.start_session(force_visible=True)
+            assert self.page is not None
+            self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+            input("Presiona [ENTER] cuando hayas iniciado sesión en Facebook... ")
+            self.close_session()
+
+        time.sleep(2.0)
+        logger.info("Verificando sesión guardada en perfil...")
+        self.start_session(force_visible=False)
         assert self.page is not None
-
         self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
-
-        print("\n" + "=" * 60)
-        print("POR FAVOR INICIA SESIÓN EN LA VENTANA DEL NAVEGADOR QUE SE ABRIÓ.")
-        print("Ingresa tu correo, contraseña y resuelve 2FA si aplica.")
-        print("Una vez que estés dentro de Facebook (en el feed principal),")
-        print("regresa a esta terminal y presiona ENTER para guardar la sesión.")
-        print("=" * 60 + "\n")
-
-        input("Presiona [ENTER] cuando hayas iniciado sesión completamente en Facebook... ")
-
-        # Quick check if logged in
+        time.sleep(3.0)
         is_logged = self.is_logged_in()
+        self.close_session()
+
         if is_logged:
-            logger.info("¡Sesión guardada exitosamente en el perfil!")
+            logger.info("¡Sesión verificada y guardada exitosamente en el perfil!")
         else:
             logger.warning(
-                "No se pudo verificar el inicio de sesión. Si iniciaste sesión, el perfil ya se guardó."
+                "No se pudo verificar el inicio de sesión. Si viste tu muro antes de cerrar, la sesión ya quedó guardada."
             )
-
-        self.close_session()
         return is_logged
 
     def is_logged_in(self) -> bool:
