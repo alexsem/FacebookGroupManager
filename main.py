@@ -179,7 +179,14 @@ def main() -> None:
         sys.exit(0)
 
     # 3. Batch campaign run or dry-run
-    if args.run or args.dry_run:
+    # Executes if --run or --dry-run is passed, or if --groups-file or --path are specified
+    should_run_campaign = (
+        args.run
+        or args.dry_run
+        or (args.groups_file is not None)
+        or (args.post_dir is not None)
+    )
+    if should_run_campaign:
         try:
             bundle = resolve_post_bundle(args, config)
         except Exception as e:

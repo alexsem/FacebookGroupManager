@@ -55,9 +55,10 @@ Publica automáticamente en todos los grupos configurados en `groups.txt` con pa
   .venv\Scripts\python.exe main.py --run --path "moto_electrica_uruz" --batch-size 5
   ```
 
-* **Usar una lista de grupos alternativa:**
+* **Usar una lista de grupos alternativa (ej. groups_test.txt):**
   ```powershell
-  .venv\Scripts\python.exe main.py --run --path "moto_electrica_uruz" --groups-file "mis_otros_grupos.txt"
+  .venv\Scripts\python.exe main.py --groups-file "groups_test.txt" --path "moto_electrica_uruz"
+  ```
   ```
 
 * **Ejecutar con la carpeta de post por defecto (`post_data/`):**
