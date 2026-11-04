@@ -1,0 +1,3 @@
+# Pega aquí las URLs de tus grupos de Facebook (uno por línea)
+https://www.facebook.com/groups/ejemplo1/
+https://www.facebook.com/groups/ejemplo2/
