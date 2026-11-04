@@ -39,7 +39,7 @@ class PosterConfig:
     batch_size: int = int(os.getenv("FB_BATCH_SIZE", "10"))
     min_post_delay: int = int(os.getenv("FB_MIN_POST_DELAY", "45"))
     max_post_delay: int = int(os.getenv("FB_MAX_POST_DELAY", "90"))
-    batch_cooldown: int = int(os.getenv("FB_BATCH_COOLDOWN", "600"))  # 10 minutes default
+    batch_cooldown: int = int(os.getenv("FB_BATCH_COOLDOWN", "30"))  # 30 seconds default
 
     # Browser options
     headless: bool = os.getenv("FB_HEADLESS", "false").lower() in ("true", "1", "yes")

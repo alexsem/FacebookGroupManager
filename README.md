@@ -102,7 +102,7 @@ En el archivo [`.env`](file:///d:/OneDrive/Documentos/Scripts/.env) puedes ajust
 | `FB_BATCH_SIZE` | Cantidad de grupos por tanda | `10` |
 | `FB_MIN_POST_DELAY` | Espera mínima entre publicaciones (segundos) | `45` |
 | `FB_MAX_POST_DELAY` | Espera máxima entre publicaciones (segundos) | `90` |
-| `FB_BATCH_COOLDOWN` | Pausa de descanso entre tandas (segundos: 600 = 10 min) | `600` |
+| `FB_BATCH_COOLDOWN` | Pausa de descanso entre tandas (segundos) | `30` |
 | `FB_HEADLESS` | `false` para ver el navegador, `true` para segundo plano | `false` |
 | `FB_HUMAN_TYPING` | Simular tipeo humano con variaciones de tiempo | `true` |
 
@@ -125,5 +125,5 @@ Cada vez que un grupo se procesa exitosamente (o queda pendiente de aprobación 
 1. **Perfil persistente (`fb_user_data/`):** Utiliza cookies y tokens reales de tu Chrome habitual sin exponer contraseñas en scripts.
 2. **Sin indicadores de automatización:** Se eliminaron las banderas `--enable-automation` y `--no-sandbox` para evitar alertas en Meta.
 3. **Pausas aleatorias (Jitter):** Espera entre 45 y 90 segundos entre cada post simulando comportamiento humano.
-4. **Pausa entre tandas (Cooldown):** Descanso configurable (10 minutos por defecto) cada 10 grupos para evitar límites de cadencia de Facebook.
+4. **Pausa entre tandas (Cooldown):** Descanso configurable (30 segundos por defecto) cada tanda de grupos para evitar saturación.
 5. **Detección de rate limits:** Si Facebook muestra un aviso de acción bloqueada o límite temporal, el script se detiene de inmediato automáticamente para resguardar la cuenta.
