@@ -198,7 +198,7 @@ class FacebookGroupPoster:
             return False
 
     def _type_human_like(self, text: str) -> None:
-        """Type message text into focused input with randomized delays."""
+        """Type message text into focused input with randomized delays and emoji support."""
         assert self.page is not None
         if not self.config.human_typing:
             self.page.keyboard.insert_text(text)
@@ -207,13 +207,15 @@ class FacebookGroupPoster:
         lines = text.split("\n")
         for i, line in enumerate(lines):
             for char in line:
-                self.page.keyboard.type(char, delay=random.randint(15, 60))
-                if random.random() < 0.05:
-                    time.sleep(random.uniform(0.1, 0.4))
+                # Use insert_text to reliably handle emojis and unicode surrogate pairs
+                self.page.keyboard.insert_text(char)
+                time.sleep(random.uniform(0.012, 0.035))
+                if random.random() < 0.04:
+                    time.sleep(random.uniform(0.08, 0.25))
             if i < len(lines) - 1:
-                # Type Enter or Shift+Enter for newlines
+                # Shift+Enter creates a new line in Facebook composer without submitting
                 self.page.keyboard.press("Shift+Enter")
-                time.sleep(random.uniform(0.1, 0.3))
+                time.sleep(random.uniform(0.1, 0.25))
 
     def _check_rate_limit(self) -> bool:
         """Detect Facebook rate limiting or temporary block banners."""
@@ -232,12 +234,12 @@ class FacebookGroupPoster:
                 return True
         return False
 
-    def _wait_for_media_upload(self, max_wait_sec: int = 60) -> None:
+    def _wait_for_media_upload(self, max_wait_sec: int = 180) -> None:
         """Wait for Facebook to process media upload (photos/videos)."""
         if not self.page:
             return
-        logger.info("Waiting for media files to finish uploading...")
-        time.sleep(2.5)
+        logger.info("Waiting for media files to finish uploading (photos/video)...")
+        time.sleep(3.0)
         start_time = time.time()
 
         post_btn_selectors = [
