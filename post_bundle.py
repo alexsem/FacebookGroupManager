@@ -99,3 +99,4 @@ class PostBundleLoader:
             f"Archivos multimedia ({bundle.media_count}): {[p.name for p in bundle.media_paths]}"
         )
         return bundle
+

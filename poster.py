@@ -54,28 +54,37 @@ class FacebookGroupPoster:
         is_headless = False if force_visible else self.config.headless
 
         logger.info(
-            f"Launching Chromium with profile at: {self.config.user_data_dir} (headless={is_headless})"
+            f"Launching browser with profile at: {self.config.user_data_dir} (headless={is_headless})"
         )
 
         args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-infobars",
             "--no-sandbox",
-            "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
         ]
 
-        self.context = self.playwright.chromium.launch_persistent_context(
-            user_data_dir=str(self.config.user_data_dir),
-            headless=is_headless,
-            viewport={"width": self.config.viewport_width, "height": self.config.viewport_height},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            ),
-            args=args,
-            locale="es-ES",
-        )
+        launch_kwargs = {
+            "user_data_dir": str(self.config.user_data_dir),
+            "headless": is_headless,
+            "viewport": {"width": self.config.viewport_width, "height": self.config.viewport_height},
+            "ignore_default_args": ["--enable-automation"],
+            "args": args,
+            "locale": "es-ES",
+        }
+
+        try:
+            # Use real installed Google Chrome for full WebAuthn/2FA and genuine browser fingerprint
+            self.context = self.playwright.chromium.launch_persistent_context(
+                channel="chrome",
+                **launch_kwargs,
+            )
+            logger.info("Using native Google Chrome browser.")
+        except Exception as e:
+            logger.warning(f"Could not launch native Chrome ({e}), falling back to bundled Chromium.")
+            self.context = self.playwright.chromium.launch_persistent_context(
+                **launch_kwargs,
+            )
 
         # Apply basic navigator override to avoid simple bot detection
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()

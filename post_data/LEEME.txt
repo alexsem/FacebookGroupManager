@@ -2,3 +2,4 @@ Coloca aquí dentro:
 1. 'post_content.txt' con el texto de tu publicación.
 2. Todas las imágenes (.jpg, .jpeg, .png, etc.) y/o videos (.mp4, .mov, etc.) que quieras adjuntar al post.
 Todos los archivos multimedia que estén en esta carpeta se adjuntarán a la misma publicación.
+
