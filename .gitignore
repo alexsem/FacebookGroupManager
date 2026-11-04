@@ -1,0 +1,33 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Environment and sensitive data
+.env
+.env.local
+.env.*.local
+
+# Browser session / profile data
+fb_user_data/
+*.session
+session/
+cookies/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Execution logs and checkpoints
+*.log
+post_history.json
+state.json
+
+# IDE / OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
