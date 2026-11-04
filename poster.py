@@ -13,7 +13,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Sequence
+from typing import Optional, List, Sequence, Any
 
 from playwright.sync_api import sync_playwright, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 
@@ -234,24 +234,25 @@ class FacebookGroupPoster:
                 return True
         return False
 
-    def _wait_for_media_upload(self, max_wait_sec: int = 180) -> None:
+    def _wait_for_media_upload(self, container: Optional[Any] = None, max_wait_sec: int = 180) -> None:
         """Wait for Facebook to process media upload (photos/videos)."""
         if not self.page:
             return
         logger.info("Waiting for media files to finish uploading (photos/video)...")
         time.sleep(3.0)
         start_time = time.time()
+        target = container if container is not None else self.page
 
         post_btn_selectors = [
-            'div[role="dialog"] div[aria-label="Publicar"][role="button"]',
-            'div[role="dialog"] div[aria-label="Post"][role="button"]',
-            'div[role="dialog"] div[role="button"]:has-text("Publicar")',
-            'div[role="dialog"] div[role="button"]:has-text("Post")',
+            'div[aria-label="Publicar"][role="button"]',
+            'div[aria-label="Post"][role="button"]',
+            'div[role="button"]:has-text("Publicar")',
+            'div[role="button"]:has-text("Post")',
         ]
 
         while time.time() - start_time < max_wait_sec:
             try:
-                progressbar = self.page.locator('div[role="dialog"] [role="progressbar"]').first
+                progressbar = target.locator('[role="progressbar"]').first
                 if progressbar.is_visible(timeout=500):
                     time.sleep(2.0)
                     continue
@@ -260,7 +261,7 @@ class FacebookGroupPoster:
 
             for sel in post_btn_selectors:
                 try:
-                    btn = self.page.locator(sel).first
+                    btn = target.locator(sel).first
                     if btn.is_visible(timeout=500):
                         disabled = btn.get_attribute("aria-disabled")
                         if disabled not in ("true", "1"):
@@ -346,24 +347,29 @@ class FacebookGroupPoster:
 
             # Click composer trigger
             trigger_elem.click()
-            time.sleep(random.uniform(2.0, 3.5))
+            time.sleep(random.uniform(2.5, 4.0))
 
-            # Wait for modal dialog
-            dialog = self.page.locator('div[role="dialog"]').first
-            dialog.wait_for(state="visible", timeout=15000)
+            # Wait for specific composer modal dialog (avoiding notifications or background dialogs)
+            composer_dialog = self.page.locator(
+                'div[role="dialog"]:has-text("Crear publicación"), '
+                'div[role="dialog"]:has-text("Create post"), '
+                'div[role="dialog"]:has-text("Crea una publicación")'
+            ).first
+            composer_dialog.wait_for(state="visible", timeout=15000)
 
-            # Find text editor inside modal
+            # Find text editor inside composer dialog
             editor_selectors = [
-                'div[role="dialog"] div[role="textbox"]',
-                'div[role="dialog"] div[contenteditable="true"]',
-                'div[role="dialog"] div[aria-label*="Escribe algo" i]',
-                'div[role="dialog"] div[aria-label*="Write something" i]',
-                'div[role="dialog"] div[aria-label*="¿Qué estás pensando" i]',
+                'div[role="textbox"][contenteditable="true"]',
+                '[data-lexical-editor="true"]',
+                '[aria-label*="pública" i][role="textbox"]',
+                '[aria-label*="public" i][role="textbox"]',
+                '[aria-label*="Escribe algo" i][role="textbox"]',
+                '[contenteditable="true"]',
             ]
 
             editor_elem = None
             for sel in editor_selectors:
-                loc = self.page.locator(sel).first
+                loc = composer_dialog.locator(sel).first
                 if loc.is_visible(timeout=3000):
                     editor_elem = loc
                     break
@@ -398,34 +404,40 @@ class FacebookGroupPoster:
                     f"Attaching {len(media_file_paths)} media file(s) to post: {[p.name for p in all_media]}..."
                 )
                 try:
-                    photo_btn = self.page.locator(
-                        'div[role="dialog"] div[aria-label*="Foto" i], '
-                        'div[role="dialog"] div[aria-label*="Photo" i], '
-                        'div[role="dialog"] div[aria-label*="video" i]'
-                    ).first
-
-                    if photo_btn.is_visible(timeout=3000):
-                        try:
-                            with self.page.expect_file_chooser(timeout=5000) as fc_info:
-                                photo_btn.click()
-                            file_chooser = fc_info.value
-                            file_chooser.set_files(media_file_paths)
-                        except Exception:
-                            file_input = self.page.locator('div[role="dialog"] input[type="file"]').first
-                            if file_input.count() > 0:
-                                file_input.set_input_files(media_file_paths)
+                    # File input is already present inside the composer dialog
+                    file_input = composer_dialog.locator('input[type="file"]').first
+                    if file_input.count() > 0:
+                        file_input.set_input_files(media_file_paths)
                     else:
-                        file_input = self.page.locator('div[role="dialog"] input[type="file"]').first
-                        if file_input.count() > 0:
-                            file_input.set_input_files(media_file_paths)
+                        photo_btn = composer_dialog.locator(
+                            'div[aria-label*="Foto" i], '
+                            'div[aria-label*="Photo" i], '
+                            'div[aria-label*="video" i], '
+                            'div[aria-label*="vídeo" i]'
+                        ).first
+                        if photo_btn.is_visible(timeout=3000):
+                            try:
+                                with self.page.expect_file_chooser(timeout=3000) as fc_info:
+                                    photo_btn.click()
+                                file_chooser = fc_info.value
+                                file_chooser.set_files(media_file_paths)
+                            except Exception:
+                                time.sleep(1.0)
+                                composer_dialog.locator('input[type="file"]').first.set_input_files(media_file_paths)
 
                     # Wait for media files to complete upload before continuing
-                    self._wait_for_media_upload()
+                    self._wait_for_media_upload(composer_dialog)
                 except Exception as media_err:
                     logger.warning(f"Could not attach media files: {media_err}")
 
             if dry_run:
                 logger.info("[DRY RUN] Simulating post submission (not clicking Post).")
+                print("\n" + "=" * 60)
+                print("[MODO SIMULACIÓN - DRY RUN]")
+                print("El mensaje y los archivos multimedia han sido cargados con éxito.")
+                print("Esperando 12 segundos para que puedas inspeccionar visualmente la ventana...")
+                print("=" * 60 + "\n")
+                time.sleep(12.0)
                 # Close dialog by pressing Escape
                 self.page.keyboard.press("Escape")
                 time.sleep(1.0)
@@ -438,15 +450,15 @@ class FacebookGroupPoster:
 
             # Find Post / Publicar button inside modal
             post_btn_selectors = [
-                'div[role="dialog"] div[aria-label="Publicar"][role="button"]',
-                'div[role="dialog"] div[aria-label="Post"][role="button"]',
-                'div[role="dialog"] div[role="button"]:has-text("Publicar")',
-                'div[role="dialog"] div[role="button"]:has-text("Post")',
+                'div[aria-label="Publicar"][role="button"]',
+                'div[aria-label="Post"][role="button"]',
+                'div[role="button"]:has-text("Publicar")',
+                'div[role="button"]:has-text("Post")',
             ]
 
             post_btn = None
             for sel in post_btn_selectors:
-                loc = self.page.locator(sel).first
+                loc = composer_dialog.locator(sel).first
                 if loc.is_visible(timeout=3000):
                     post_btn = loc
                     break
@@ -467,7 +479,7 @@ class FacebookGroupPoster:
 
             # Wait for modal to dismiss
             try:
-                dialog.wait_for(state="hidden", timeout=25000)
+                composer_dialog.wait_for(state="hidden", timeout=25000)
                 status = "SUCCESS"
                 details = "Post published successfully."
             except PlaywrightTimeoutError:
