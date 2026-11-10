@@ -6,7 +6,7 @@ Script en Python modular y orientado a objetos para publicar en múltiples grupo
 
 ## ⚡ Comandos Rápidos (Copiar y Pegar)
 
-> Abre tu terminal de PowerShell en la carpeta del proyecto (`d:\OneDrive\Documentos\Scripts`) antes de ejecutar:
+> Abre tu terminal de PowerShell en la carpeta del proyecto (`d:\OneDrive\Documentos\Scripts\FacebookGroupManager`) antes de ejecutar:
 
 ### 1. Iniciar sesión por primera vez (Solo se hace una vez)
 Abre Chrome nativo para ingresar con tu cuenta y guardar la sesión persistente en `fb_user_data/`:
