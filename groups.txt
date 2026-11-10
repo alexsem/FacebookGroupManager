@@ -1,3 +1,4 @@
 # Pega aquí las URLs de tus grupos de Facebook (uno por línea)
-https://www.facebook.com/groups/ejemplo1/
-https://www.facebook.com/groups/ejemplo2/
+https://www.facebook.com/groups/1887266828711361/
+https://www.facebook.com/groups/810085373825053/
+https://www.facebook.com/groups/446502960429596/
