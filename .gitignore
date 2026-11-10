@@ -25,6 +25,7 @@ __pycache__/
 *.log
 post_history.json
 state.json
+groups_test.txt
 
 # IDE / OS files
 .vscode/
