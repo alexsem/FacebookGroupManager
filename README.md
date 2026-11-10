@@ -8,6 +8,15 @@ Script en Python modular y orientado a objetos para publicar en múltiples grupo
 
 > Abre tu terminal de PowerShell en la carpeta del proyecto (`d:\OneDrive\Documentos\Scripts\FacebookGroupManager`) antes de ejecutar:
 
+### 🖥️ Iniciar el Panel de Control Gráfico (Interfaz de Ventana PySide6)
+Inicia la aplicación de escritorio completa con visor de grupos, previsualizador de contenido multimedia, consola en vivo y control de pausas/reanudación:
+```powershell
+.venv\Scripts\python.exe main.py
+```
+*(Opcionalmente: `.venv\Scripts\python.exe main.py --gui`)*
+
+---
+
 ### 1. Iniciar sesión por primera vez (Solo se hace una vez)
 Abre Chrome nativo para ingresar con tu cuenta y guardar la sesión persistente en `fb_user_data/`:
 ```powershell
