@@ -521,6 +521,7 @@ class FacebookGroupPoster:
         media_paths: Optional[Sequence[Path]] = None,
         image_path: Optional[Path] = None,
         dry_run: bool = False,
+        ignore_history: bool = False,
     ) -> None:
         """Run campaign through batches with anti-detection pacing and cooldown."""
         self.start_session()
@@ -537,8 +538,9 @@ class FacebookGroupPoster:
             return
 
         batch_number = 1
+        skip_history = ignore_history or dry_run
         try:
-            for batch in manager.stream_batches():
+            for batch in manager.stream_batches(ignore_history=skip_history):
                 logger.info(
                     f"\n{'=' * 20} INICIANDO TANDA {batch_number} ({len(batch)} grupos) {'=' * 20}"
                 )

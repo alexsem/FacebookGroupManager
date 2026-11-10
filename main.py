@@ -134,6 +134,13 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help="Ruta a una imagen individual para adjuntar.",
     )
+    parser.add_argument(
+        "--ignore-history",
+        "--force",
+        dest="ignore_history",
+        action="store_true",
+        help="Ignora el historial de publicaciones previas y procesa todos los grupos de la lista.",
+    )
     return parser.parse_args()
 
 
@@ -223,6 +230,7 @@ def main() -> None:
             message=bundle.text,
             media_paths=bundle.media_paths,
             dry_run=args.dry_run,
+            ignore_history=args.ignore_history,
         )
         sys.exit(0)
 

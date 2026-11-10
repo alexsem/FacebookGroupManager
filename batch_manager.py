@@ -61,7 +61,7 @@ class GroupBatchManager:
         }
         self._save_history()
 
-    def stream_pending_groups(self) -> Generator[str, None, None]:
+    def stream_pending_groups(self, ignore_history: bool = False) -> Generator[str, None, None]:
         """Stream unprocessed group URLs line by line using a generator."""
         if not self.groups_file.exists():
             raise FileNotFoundError(f"Groups file not found at: {self.groups_file}")
@@ -71,13 +71,13 @@ class GroupBatchManager:
                 cleaned = line.strip()
                 if not cleaned or cleaned.startswith("#"):
                     continue
-                if not self.is_processed(cleaned):
+                if ignore_history or not self.is_processed(cleaned):
                     yield cleaned
 
-    def stream_batches(self) -> Generator[List[str], None, None]:
+    def stream_batches(self, ignore_history: bool = False) -> Generator[List[str], None, None]:
         """Yield batches of pending group URLs using a generator."""
         current_batch: List[str] = []
-        for group_url in self.stream_pending_groups():
+        for group_url in self.stream_pending_groups(ignore_history=ignore_history):
             current_batch.append(group_url)
             if len(current_batch) >= self.batch_size:
                 yield current_batch
