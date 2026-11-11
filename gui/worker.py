@@ -259,3 +259,4 @@ class CampaignWorker(QThread):
         finally:
             poster.close_session()
             self.sig_finished.emit(self.manager.get_stats())
+

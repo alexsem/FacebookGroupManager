@@ -137,3 +137,4 @@ if [[ ${#APP_ARGS[@]} -eq 0 ]]; then
 else
     exec "$VENV_PYTHON" main.py "${APP_ARGS[@]}"
 fi
+
