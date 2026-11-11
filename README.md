@@ -8,6 +8,15 @@ Script en Python modular y orientado a objetos para publicar en múltiples grupo
 
 > Abre tu terminal de PowerShell en la carpeta del proyecto (`d:\OneDrive\Documentos\Scripts\FacebookGroupManager`) antes de ejecutar:
 
+### 🚀 Instalación y Arranque Automático (Bash / Git Bash / WSL / Linux / macOS)
+Crea `.venv`, instala dependencias, verifica Chromium de Playwright, inicializa archivos de configuración si faltan y abre la aplicación:
+```bash
+./setup_and_run.sh
+```
+*(Opciones útiles: `./setup_and_run.sh --setup-only` para solo instalar, `./setup_and_run.sh --reinstall` para reinstalar, o `./setup_and_run.sh --login` para pasar argumentos a `main.py`)*
+
+---
+
 ### 🖥️ Iniciar el Panel de Control Gráfico (Interfaz de Ventana PySide6)
 Inicia la aplicación de escritorio completa con visor de grupos, previsualizador de contenido multimedia, consola en vivo y control de pausas/reanudación:
 ```powershell
