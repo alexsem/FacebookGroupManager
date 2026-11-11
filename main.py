@@ -141,12 +141,33 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Ignora el historial de publicaciones previas y procesa todos los grupos de la lista.",
     )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Inicia la interfaz gráfica de usuario en ventana (PySide6).",
+    )
     return parser.parse_args()
+
+
+def launch_gui(config: PosterConfig) -> None:
+    """Launch PySide6 graphical user interface."""
+    from PySide6.QtWidgets import QApplication
+    from gui.main_window import MainWindow
+
+    app = QApplication(sys.argv)
+    window = MainWindow(config)
+    window.show()
+    sys.exit(app.exec())
 
 
 def main() -> None:
     args = parse_arguments()
     config = PosterConfig()
+
+    # 0. Launch GUI if --gui is passed or if executed without any CLI arguments
+    if args.gui or len(sys.argv) == 1:
+        launch_gui(config)
+        return
 
     groups_file = Path(args.groups_file) if args.groups_file else config.groups_file
     batch_size = args.batch_size if args.batch_size else config.batch_size
