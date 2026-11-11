@@ -95,8 +95,13 @@ if "%NEED_INSTALL%"=="1" (
     if "%HAS_UV%"=="1" (
         uv pip install --python "%VENV_PYTHON%" -r requirements.txt
     ) else (
-        "%VENV_PYTHON%" -m pip install --upgrade pip
-        "%VENV_PYTHON%" -m pip install -r requirements.txt
+        "%VENV_PYTHON%" -m pip install --upgrade pip --retries 15 --timeout 60
+        "%VENV_PYTHON%" -m pip install --help | findstr /C:"--resume-retries" >nul 2>&1
+        if !ERRORLEVEL!==0 (
+            "%VENV_PYTHON%" -m pip install --retries 15 --timeout 120 --resume-retries 15 -r requirements.txt
+        ) else (
+            "%VENV_PYTHON%" -m pip install --retries 15 --timeout 120 -r requirements.txt
+        )
     )
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.

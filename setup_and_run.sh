@@ -90,8 +90,12 @@ if [[ "$FORCE_REINSTALL" == true || "$REQ_HASH" != "$PREV_HASH" ]]; then
     if command -v uv >/dev/null 2>&1; then
         uv pip install --python "$VENV_PYTHON" -r requirements.txt
     else
-        "$VENV_PYTHON" -m pip install --upgrade pip
-        "$VENV_PYTHON" -m pip install -r requirements.txt
+        "$VENV_PYTHON" -m pip install --upgrade pip --retries 15 --timeout 60
+        if "$VENV_PYTHON" -m pip install --help | grep -q -- "--resume-retries"; then
+            "$VENV_PYTHON" -m pip install --retries 15 --timeout 120 --resume-retries 15 -r requirements.txt
+        else
+            "$VENV_PYTHON" -m pip install --retries 15 --timeout 120 -r requirements.txt
+        fi
     fi
     echo "$REQ_HASH" > "$HASH_FILE"
 else
