@@ -43,7 +43,7 @@ class CampaignWorker(QThread):
     sig_log = Signal(str, str)  # level, message
     sig_status = Signal(str)
     sig_group_started = Signal(str, int, int)  # url, current_1_based, total
-    sig_group_finished = Signal(str, str, str)  # url, status, details
+    sig_group_finished = Signal(str, str, str, str)  # url, status, details, post_url
     sig_batch_completed = Signal(int, int)  # batch_num, total_batches
     sig_countdown = Signal(str, int)  # label, seconds_left
     sig_finished = Signal(dict)  # final stats
@@ -149,6 +149,7 @@ class CampaignWorker(QThread):
             post_dir=self.config.post_dir,
             post_file=self.config.post_file,
             history_file=self.config.history_file,
+            db_path=self.config.db_path,
             image_path=self.config.image_path,
             batch_size=self.batch_size,
             min_post_delay=self.min_delay,
@@ -158,6 +159,7 @@ class CampaignWorker(QThread):
             viewport_width=self.config.viewport_width,
             viewport_height=self.config.viewport_height,
             human_typing=self.config.human_typing,
+            capture_post_url=self.config.capture_post_url,
         )
 
         poster = FacebookGroupPoster(custom_config)
@@ -221,9 +223,16 @@ class CampaignWorker(QThread):
                         group_url=group_url,
                         status=result.status,
                         details=result.details,
+                        post_url=result.post_url,
+                        fb_post_id=result.fb_post_id,
                     )
 
-                    self.sig_group_finished.emit(group_url, result.status, result.details)
+                    self.sig_group_finished.emit(
+                        group_url,
+                        result.status,
+                        result.details,
+                        result.post_url or "",
+                    )
 
                     # Emergency stop if Facebook triggered an anti-spam block
                     if result.status == "BLOCKED":

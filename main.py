@@ -22,6 +22,14 @@ from config import PosterConfig
 from batch_manager import GroupBatchManager
 from post_bundle import PostBundle, PostBundleLoader
 from poster import FacebookGroupPoster, logger
+from storage import (
+    CampaignRepository,
+    DatabaseManager,
+    GroupRepository,
+    LegacyMigrator,
+    PostRepository,
+    compute_content_hash,
+)
 
 
 def load_post_content(post_file: Path) -> str:
@@ -146,6 +154,23 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Inicia la interfaz gráfica de usuario en ventana (PySide6).",
     )
+    parser.add_argument(
+        "--new-campaign",
+        action="store_true",
+        help="Crea una nueva campaña activa aunque el contenido coincida con la campaña actual.",
+    )
+    parser.add_argument(
+        "--campaign-name",
+        type=str,
+        default=None,
+        help="Nombre personalizado para la campaña en la base de datos.",
+    )
+    parser.add_argument(
+        "--import-groups",
+        type=str,
+        default=None,
+        help="Importa URLs de grupos desde un archivo .txt hacia la base de datos SQLite.",
+    )
     return parser.parse_args()
 
 
@@ -179,81 +204,133 @@ def main() -> None:
         poster.run_login_flow()
         sys.exit(0)
 
-    # 2. Single group test
-    if args.single:
-        try:
-            bundle = resolve_post_bundle(args, config)
-        except Exception as e:
-            logger.error(str(e))
-            sys.exit(1)
+    db = DatabaseManager(config.db_path)
+    try:
+        LegacyMigrator.migrate_if_needed(
+            db,
+            groups_file=groups_file if groups_file.exists() else None,
+            history_file=config.history_file,
+        )
 
-        print("\n" + "=" * 60)
-        print(f"Directorio de contenido: {bundle.source_dir}")
-        print(f"Texto ({len(bundle.text)} caracteres): {bundle.text[:80]}...")
-        print(f"Multimedia adjunta ({bundle.media_count}): {[p.name for p in bundle.media_paths]}")
-        print("=" * 60 + "\n")
+        # Optional explicit import of groups into SQLite
+        if args.import_groups:
+            import_path = Path(args.import_groups)
+            imported = GroupRepository(db).import_from_txt(import_path)
+            logger.info(f"Grupos nuevos importados desde {import_path}: {imported}")
+            if not (args.single or args.run or args.dry_run or args.post_dir):
+                sys.exit(0)
 
-        poster.start_session(force_visible=True)
-        try:
-            res = poster.post_to_group(
-                group_url=args.single,
+        # 2. Single group test
+        if args.single:
+            try:
+                bundle = resolve_post_bundle(args, config)
+            except Exception as e:
+                logger.error(str(e))
+                sys.exit(1)
+
+            print("\n" + "=" * 60)
+            print(f"Directorio de contenido: {bundle.source_dir}")
+            print(f"Texto ({len(bundle.text)} caracteres): {bundle.text[:80]}...")
+            print(f"Multimedia adjunta ({bundle.media_count}): {[p.name for p in bundle.media_paths]}")
+            print("=" * 60 + "\n")
+
+            poster.start_session(force_visible=True)
+            try:
+                res = poster.post_to_group(
+                    group_url=args.single,
+                    message=bundle.text,
+                    media_paths=bundle.media_paths,
+                    dry_run=args.dry_run,
+                )
+                print(f"\nResultado de la prueba individual: {res}\n")
+                if not args.dry_run:
+                    content_hash = compute_content_hash(
+                        bundle.text, [p.name for p in bundle.media_paths]
+                    )
+                    campaign = CampaignRepository(db).get_or_create_for_bundle(
+                        name=args.campaign_name or bundle.source_dir.name,
+                        post_text=bundle.text,
+                        bundle_dir=str(bundle.source_dir),
+                        content_hash=content_hash,
+                        force_new=args.new_campaign,
+                    )
+                    PostRepository(db).record_post(
+                        campaign_id=campaign.id,
+                        group_url=args.single,
+                        status=res.status,
+                        details=res.details,
+                        post_url=res.post_url,
+                        fb_post_id=res.fb_post_id,
+                    )
+            finally:
+                poster.close_session()
+            sys.exit(0)
+
+        # 3. Batch campaign run or dry-run
+        # Executes if --run or --dry-run is passed, or if --groups-file or --path are specified
+        should_run_campaign = (
+            args.run
+            or args.dry_run
+            or (args.groups_file is not None)
+            or (args.post_dir is not None)
+        )
+        if should_run_campaign:
+            try:
+                bundle = resolve_post_bundle(args, config)
+            except Exception as e:
+                logger.error(str(e))
+                sys.exit(1)
+
+            effective_groups_file = groups_file if groups_file.exists() else None
+            if effective_groups_file is None and GroupRepository(db).count_groups() == 0:
+                logger.error(
+                    f"No hay grupos en la base de datos ni se encontró el archivo: {groups_file}\n"
+                    f"Importa grupos con '--import-groups groups.txt' o crea '{groups_file.name}'."
+                )
+                sys.exit(1)
+
+            content_hash = compute_content_hash(
+                bundle.text, [p.name for p in bundle.media_paths]
+            )
+            campaign = CampaignRepository(db).get_or_create_for_bundle(
+                name=args.campaign_name or bundle.source_dir.name,
+                post_text=bundle.text,
+                bundle_dir=str(bundle.source_dir),
+                content_hash=content_hash,
+                force_new=args.new_campaign,
+            )
+
+            manager = GroupBatchManager(
+                groups_file=effective_groups_file,
+                history_file=config.history_file,
+                batch_size=batch_size,
+                db=db,
+                campaign_id=campaign.id,
+            )
+
+            initial_stats = manager.get_stats()
+            logger.info(f"Campaña activa #{campaign.id}: '{campaign.name}'")
+            logger.info(f"Historial previo de campaña: {initial_stats}")
+            logger.info(
+                f"Configuración de campaña: Tanda={batch_size} grupos, "
+                f"Intervalo entre posts={config.min_post_delay}-{config.max_post_delay}s, "
+                f"Pausa entre tandas={config.batch_cooldown}s"
+            )
+            logger.info(
+                f"Contenido a publicar desde: {bundle.source_dir} | "
+                f"Multimedia ({bundle.media_count}): {[p.name for p in bundle.media_paths]}"
+            )
+
+            poster.execute_campaign(
+                manager=manager,
                 message=bundle.text,
                 media_paths=bundle.media_paths,
                 dry_run=args.dry_run,
+                ignore_history=args.ignore_history,
             )
-            print(f"\nResultado de la prueba individual: {res}\n")
-        finally:
-            poster.close_session()
-        sys.exit(0)
-
-    # 3. Batch campaign run or dry-run
-    # Executes if --run or --dry-run is passed, or if --groups-file or --path are specified
-    should_run_campaign = (
-        args.run
-        or args.dry_run
-        or (args.groups_file is not None)
-        or (args.post_dir is not None)
-    )
-    if should_run_campaign:
-        try:
-            bundle = resolve_post_bundle(args, config)
-        except Exception as e:
-            logger.error(str(e))
-            sys.exit(1)
-
-        if not groups_file.exists():
-            logger.error(
-                f"El archivo con las URLs de grupos no existe: {groups_file}\n"
-                f"Crea un archivo '{groups_file.name}' con una URL de grupo por línea."
-            )
-            sys.exit(1)
-
-        manager = GroupBatchManager(
-            groups_file=groups_file,
-            history_file=config.history_file,
-            batch_size=batch_size,
-        )
-
-        initial_stats = manager.get_stats()
-        logger.info(f"Historial previo: {initial_stats}")
-        logger.info(
-            f"Configuración de campaña: Tanda={batch_size} grupos, "
-            f"Intervalo entre posts={config.min_post_delay}-{config.max_post_delay}s, "
-            f"Pausa entre tandas={config.batch_cooldown}s"
-        )
-        logger.info(
-            f"Contenido a publicar desde: {bundle.source_dir} | "
-            f"Multimedia ({bundle.media_count}): {[p.name for p in bundle.media_paths]}"
-        )
-
-        poster.execute_campaign(
-            manager=manager,
-            message=bundle.text,
-            media_paths=bundle.media_paths,
-            dry_run=args.dry_run,
-            ignore_history=args.ignore_history,
-        )
-        sys.exit(0)
+            sys.exit(0)
+    finally:
+        db.close()
 
     # If no action specified, display help
     print(
