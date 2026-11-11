@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from PySide6.QtCore import QObject, Signal
+import shiboken6
 
 
 class LogEmitter(QObject):
@@ -18,13 +19,22 @@ class QtSignalingLogHandler(logging.Handler):
 
     def __init__(self, emitter: LogEmitter) -> None:
         super().__init__()
-        self.emitter = emitter
+        self.emitter: LogEmitter | None = emitter
 
     def emit(self, record: logging.LogRecord) -> None:
+        if self.emitter is None or not shiboken6.isValid(self.emitter):
+            return
         try:
             msg = self.format(record)
             level = record.levelname
             timestamp = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
             self.emitter.sig_log.emit(timestamp, level, msg)
+        except RuntimeError:
+            # Qt object was already deleted during shutdown
+            self.emitter = None
         except Exception:
             self.handleError(record)
+
+    def close(self) -> None:
+        self.emitter = None
+        super().close()

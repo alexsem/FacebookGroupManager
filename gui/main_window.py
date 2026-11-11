@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QIcon, QTextCursor
+from PySide6.QtGui import QCloseEvent, QColor, QFont, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -63,7 +63,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(DARK_THEME_QSS)
 
         # Setup logging interceptor
-        self.log_emitter = LogEmitter()
+        self.log_emitter = LogEmitter(self)
         self.log_emitter.sig_log.connect(self._on_log_received)
         self.log_handler = QtSignalingLogHandler(self.log_emitter)
         self.log_handler.setLevel(logging.INFO)
@@ -838,3 +838,13 @@ class MainWindow(QMainWindow):
         html_line = f"<span style='color: #7D8B9B;'>[{timestamp}]</span> <span style='color: {color};'><b>[{level}]</b> {msg}</span>"
         self.txt_console.appendHtml(html_line)
         self.txt_console.moveCursor(QTextCursor.MoveOperation.End)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Detach log handler and stop active workers cleanly on window close."""
+        logging.getLogger().removeHandler(self.log_handler)
+        self.log_handler.close()
+        if self.campaign_worker and self.campaign_worker.isRunning():
+            self.campaign_worker.stop()
+            self.campaign_worker.wait(3000)
+        super().closeEvent(event)
+
