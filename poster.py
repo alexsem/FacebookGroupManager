@@ -9,11 +9,13 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Sequence, Any
+from typing import Any, List, Optional, Sequence, Tuple
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from playwright.sync_api import sync_playwright, BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 
@@ -27,6 +29,65 @@ logging.basicConfig(
 )
 logger = logging.getLogger("FacebookPoster")
 
+_POST_ID_PATTERNS = (
+    re.compile(r"/groups/[^/]+/posts/(\d+)"),
+    re.compile(r"/groups/[^/]+/permalink/(\d+)"),
+    re.compile(r"/posts/(\d+)"),
+    re.compile(r"[?&]multi_permalinks=(\d+)"),
+    re.compile(r"[?&]story_fbid=(\d+)"),
+)
+_IGNORED_QUERY_PREFIXES = ("__cft__", "__tn__", "notif_", "ref")
+
+
+def extract_fb_post_id(url: str) -> Optional[str]:
+    """Extract numeric Facebook post ID from a permalink URL."""
+    if not url:
+        return None
+    for pattern in _POST_ID_PATTERNS:
+        match = pattern.search(url)
+        if match:
+            return match.group(1)
+    return None
+
+
+def normalize_fb_post_url(raw_href: str, group_url: str = "") -> Optional[str]:
+    """Normalize a candidate Facebook link into a clean post permalink if valid."""
+    if not raw_href:
+        return None
+    candidate = raw_href.strip()
+    if candidate.startswith("#") or candidate.startswith("javascript:"):
+        return None
+
+    full_url = urljoin("https://www.facebook.com", candidate)
+    parsed = urlparse(full_url)
+    if "facebook.com" not in parsed.netloc.lower():
+        return None
+
+    # Ignore comment-specific anchors when looking for the parent post permalink
+    qs = parse_qs(parsed.query)
+    if "comment_id" in qs or "reply_comment_id" in qs:
+        return None
+
+    post_id = extract_fb_post_id(full_url)
+    if not post_id:
+        return None
+
+    # Keep only essential query params (e.g., multi_permalinks / story_fbid)
+    kept_params = {
+        k: v
+        for k, v in qs.items()
+        if k in ("multi_permalinks", "story_fbid", "id")
+        and not any(k.startswith(prefix) for prefix in _IGNORED_QUERY_PREFIXES)
+    }
+    clean_query = urlencode(kept_params, doseq=True)
+    clean_path = parsed.path.rstrip("/") + "/" if parsed.path else "/"
+    normalized = urlunparse(("https", "www.facebook.com", clean_path, "", clean_query, ""))
+
+    # If group_url is given and candidate is a generic group link with multi_permalinks, keep it
+    if group_url and "/groups/" not in normalized and "multi_permalinks=" not in normalized:
+        return normalized
+    return normalized
+
 
 @dataclass
 class PostResult:
@@ -36,6 +97,8 @@ class PostResult:
     success: bool
     status: str
     details: str = ""
+    post_url: Optional[str] = None
+    fb_post_id: Optional[str] = None
 
 
 class FacebookGroupPoster:
@@ -272,6 +335,78 @@ class FacebookGroupPoster:
                     pass
             time.sleep(1.5)
 
+    def _find_first_post_link(self, scope: Any, group_url: str) -> Tuple[Optional[str], Optional[str]]:
+        """Inspect candidate permalink anchors inside a Playwright Locator/Page scope."""
+        link_selectors = (
+            'a[href*="/posts/"]',
+            'a[href*="/permalink/"]',
+            'a[href*="multi_permalinks="]',
+        )
+        for sel in link_selectors:
+            try:
+                loc = scope.locator(sel)
+                count = min(loc.count(), 5)
+                for idx in range(count):
+                    href = loc.nth(idx).get_attribute("href")
+                    normalized = normalize_fb_post_url(href or "", group_url=group_url)
+                    if normalized:
+                        return normalized, extract_fb_post_id(normalized)
+            except Exception:
+                continue
+        return None, None
+
+    def _extract_published_post_url(self, group_url: str) -> Tuple[Optional[str], Optional[str]]:
+        """Attempt to capture the permalink URL of the newly published post."""
+        if not self.page:
+            return None, None
+        try:
+            time.sleep(2.0)
+
+            # Strategy 1: Toast / snackbar ("Ver publicación" / "View post")
+            toast_selectors = (
+                'div[role="alert"]',
+                'div[role="status"]',
+                'a:has-text("Ver publicación")',
+                'a:has-text("View post")',
+            )
+            for sel in toast_selectors:
+                try:
+                    elem = self.page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        href = elem.get_attribute("href")
+                        if href:
+                            normalized = normalize_fb_post_url(href, group_url=group_url)
+                            if normalized:
+                                logger.info(f"Captured post URL from toast: {normalized}")
+                                return normalized, extract_fb_post_id(normalized)
+                        url, pid = self._find_first_post_link(elem, group_url)
+                        if url:
+                            logger.info(f"Captured post URL from toast container: {url}")
+                            return url, pid
+                except Exception:
+                    continue
+
+            # Strategy 2: Top articles in the group feed
+            articles = self.page.locator('div[role="feed"] div[role="article"]')
+            for idx in range(min(articles.count(), 2)):
+                url, pid = self._find_first_post_link(articles.nth(idx), group_url)
+                if url:
+                    logger.info(f"Captured post URL from top group feed: {url}")
+                    return url, pid
+
+            # Strategy 3: Fallback to /my_posted_content for the current group
+            my_content_url = group_url.rstrip("/") + "/my_posted_content"
+            self.page.goto(my_content_url, wait_until="domcontentloaded", timeout=20000)
+            time.sleep(2.5)
+            url, pid = self._find_first_post_link(self.page, group_url)
+            if url:
+                logger.info(f"Captured post URL from my_posted_content: {url}")
+                return url, pid
+        except Exception as err:
+            logger.warning(f"Could not capture published post URL for {group_url}: {err}")
+
+        return None, None
+
     def post_to_group(
         self,
         group_url: str,
@@ -478,10 +613,16 @@ class FacebookGroupPoster:
             logger.info("Clicked 'Post'. Waiting for confirmation...")
 
             # Wait for modal to dismiss
+            post_url: Optional[str] = None
+            fb_post_id: Optional[str] = None
             try:
                 composer_dialog.wait_for(state="hidden", timeout=25000)
                 status = "SUCCESS"
                 details = "Post published successfully."
+                if self.config.capture_post_url:
+                    post_url, fb_post_id = self._extract_published_post_url(group_url)
+                    if post_url:
+                        details = f"Post published successfully. URL: {post_url}"
             except PlaywrightTimeoutError:
                 # Check if it was submitted for admin approval
                 approval_note = self.page.locator(
@@ -495,7 +636,14 @@ class FacebookGroupPoster:
                     details = "Dialog did not close in time, but post was submitted."
 
             logger.info(f"Result for {group_url}: {status}")
-            return PostResult(group_url=group_url, success=True, status=status, details=details)
+            return PostResult(
+                group_url=group_url,
+                success=True,
+                status=status,
+                details=details,
+                post_url=post_url,
+                fb_post_id=fb_post_id,
+            )
 
         except PlaywrightTimeoutError as te:
             logger.error(f"Timeout while interacting with {group_url}: {te}")
@@ -562,6 +710,8 @@ class FacebookGroupPoster:
                         group_url=group_url,
                         status=result.status,
                         details=result.details,
+                        post_url=result.post_url,
+                        fb_post_id=result.fb_post_id,
                     )
 
                     # If Facebook blocked the action, stop to protect the account

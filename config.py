@@ -31,6 +31,7 @@ class PosterConfig:
     post_dir: Path = BASE_DIR / os.getenv("FB_POST_DIR", "post_data")
     post_file: Path = BASE_DIR / os.getenv("FB_POST_FILE", "post_content.txt")
     history_file: Path = BASE_DIR / os.getenv("FB_HISTORY_FILE", "post_history.json")
+    db_path: Path = BASE_DIR / os.getenv("FB_DB_PATH", "fb_manager.db")
     image_path: Path | None = (
         BASE_DIR / os.getenv("FB_IMAGE_PATH") if os.getenv("FB_IMAGE_PATH") else None
     )
@@ -46,8 +47,9 @@ class PosterConfig:
     viewport_width: int = int(os.getenv("FB_VIEWPORT_WIDTH", "1280"))
     viewport_height: int = int(os.getenv("FB_VIEWPORT_HEIGHT", "800"))
 
-    # Anti-bot options
+    # Anti-bot and URL capture options
     human_typing: bool = os.getenv("FB_HUMAN_TYPING", "true").lower() in ("true", "1", "yes")
+    capture_post_url: bool = os.getenv("FB_CAPTURE_POST_URL", "true").lower() in ("true", "1", "yes")
 
     @property
     def resolved_post_dir(self) -> Path:

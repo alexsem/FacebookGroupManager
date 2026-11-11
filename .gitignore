@@ -21,11 +21,15 @@ __pycache__/
 *$py.class
 *.so
 
-# Execution logs and checkpoints
+# Execution logs, checkpoints and local databases
 *.log
 post_history.json
 state.json
 groups_test.txt
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
 
 # IDE / OS files
 .vscode/
