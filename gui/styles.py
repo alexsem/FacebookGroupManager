@@ -15,6 +15,49 @@ QWidget {
     selection-color: #FFFFFF;
 }
 
+/* Menu Bar */
+QMenuBar {
+    background-color: #181B20;
+    color: #E1E7EC;
+    border-bottom: 1px solid #262B33;
+    padding: 4px 8px;
+}
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+QMenuBar::item:selected {
+    background-color: #242932;
+    color: #4DA2FF;
+}
+
+QMenu {
+    background-color: #181B20;
+    border: 1px solid #2B313B;
+    border-radius: 6px;
+    padding: 4px;
+    color: #E1E7EC;
+}
+
+QMenu::item {
+    padding: 7px 24px 7px 14px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background-color: #2D68C4;
+    color: #FFFFFF;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #262B33;
+    margin: 4px 8px;
+}
+
 /* Tab Bar */
 QTabWidget::pane {
     border: 1px solid #262B33;
@@ -248,3 +291,4 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
 }
 """
+

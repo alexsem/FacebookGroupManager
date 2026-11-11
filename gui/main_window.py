@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QColor, QFont, QIcon, QTextCursor
+from PySide6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
+    QFormLayout,
     QFrame,
     QGroupBox,
     QHBoxLayout,
@@ -76,6 +77,8 @@ class MainWindow(QMainWindow):
         self._reload_history_table()
 
     def _init_ui(self) -> None:
+        self._create_menu_bar()
+
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
@@ -89,14 +92,53 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tab_campaign = QWidget()
         self.tab_history = QWidget()
+        self.tab_config = QWidget()
 
+        # Build config tab first so parameter widgets exist for campaign summary
+        self._build_config_tab()
         self._build_campaign_tab()
         self._build_history_tab()
 
         self.tabs.addTab(self.tab_campaign, "🚀 Campaña de Publicación")
         self.tabs.addTab(self.tab_history, "📜 Historial y Auditoría")
+        self.tabs.addTab(self.tab_config, "⚙️ Configuración")
 
         main_layout.addWidget(self.tabs, stretch=1)
+        self._update_config_summary()
+
+    def _create_menu_bar(self) -> None:
+        menubar = self.menuBar()
+
+        # Menu: Archivo
+        menu_file = menubar.addMenu("Archivo")
+        act_reload_bundles = QAction("🔄 Recargar Carpetas de Contenido", self)
+        act_reload_bundles.triggered.connect(self._load_bundle_directories)
+        menu_file.addAction(act_reload_bundles)
+
+        act_change_groups = QAction("📂 Cambiar Archivo de Grupos...", self)
+        act_change_groups.triggered.connect(self._on_browse_groups_file)
+        menu_file.addAction(act_change_groups)
+
+        menu_file.addSeparator()
+        act_exit = QAction("Salir", self)
+        act_exit.triggered.connect(self.close)
+        menu_file.addAction(act_exit)
+
+        # Menu: Configuración
+        menu_config = menubar.addMenu("Configuración")
+        act_params = QAction("⚙️ Parámetros de Envío", self)
+        act_params.triggered.connect(lambda: self.tabs.setCurrentWidget(self.tab_config))
+        menu_config.addAction(act_params)
+
+        act_reset = QAction("↺ Restaurar Valores por Defecto", self)
+        act_reset.triggered.connect(self._reset_default_params)
+        menu_config.addAction(act_reset)
+
+        # Menu: Sesión
+        menu_session = menubar.addMenu("Sesión")
+        act_login = QAction("🔑 Iniciar Sesión en Facebook", self)
+        act_login.triggered.connect(self._on_login_clicked)
+        menu_session.addAction(act_login)
 
     # -------------------------------------------------------------------------
     # Header Bar
@@ -174,65 +216,35 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(QLabel("Texto del mensaje (post_content.txt):"))
         self.txt_content_preview = QTextEdit()
         self.txt_content_preview.setPlaceholderText("El texto cargado del bundle aparecerá aquí...")
-        self.txt_content_preview.setMaximumHeight(130)
-        content_layout.addWidget(self.txt_content_preview)
+        self.txt_content_preview.setMinimumHeight(180)
+        content_layout.addWidget(self.txt_content_preview, stretch=1)
 
         # Attached Media summary label
         self.lbl_media_summary = QLabel("Archivos multimedia: Ninguno")
         self.lbl_media_summary.setStyleSheet("color: #4DA2FF; font-weight: 500;")
         content_layout.addWidget(self.lbl_media_summary)
 
-        layout.addWidget(grp_content)
+        layout.addWidget(grp_content, stretch=1)
 
-        # --- 2. Campaign Parameters Card ---
-        grp_params = QGroupBox("⚙️ Parámetros de Envío")
-        params_layout = QVBoxLayout(grp_params)
-        params_layout.setSpacing(8)
+        # --- 2. Compact Config Summary Strip ---
+        summary_card = QFrame()
+        summary_card.setStyleSheet(
+            "background-color: #181B20; border: 1px solid #262B33; border-radius: 8px; padding: 6px;"
+        )
+        summary_row = QHBoxLayout(summary_card)
+        summary_row.setContentsMargins(10, 6, 10, 6)
 
-        # Batch Size and Cooldown
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Tamaño de tanda:"))
-        self.spin_batch_size = QSpinBox()
-        self.spin_batch_size.setRange(1, 100)
-        self.spin_batch_size.setValue(self.config.batch_size)
-        row1.addWidget(self.spin_batch_size)
+        self.lbl_config_summary = QLabel("⚙️ Tanda: 10 | Delays: 45-90s | Cooldown: 30s")
+        self.lbl_config_summary.setStyleSheet("color: #9AA7B5; font-size: 12px;")
+        self.lbl_config_summary.setWordWrap(True)
+        summary_row.addWidget(self.lbl_config_summary, stretch=1)
 
-        row1.addWidget(QLabel("Cooldown (segundos):"))
-        self.spin_cooldown = QSpinBox()
-        self.spin_cooldown.setRange(5, 7200)
-        self.spin_cooldown.setValue(self.config.batch_cooldown)
-        self.spin_cooldown.setToolTip("Pausa anti-bloqueo entre cada tanda de grupos")
-        row1.addWidget(self.spin_cooldown)
-        params_layout.addLayout(row1)
+        btn_edit_config = QPushButton("⚙️ Ajustar")
+        btn_edit_config.setToolTip("Ir a la pestaña Configuración")
+        btn_edit_config.clicked.connect(lambda: self.tabs.setCurrentWidget(self.tab_config))
+        summary_row.addWidget(btn_edit_config)
 
-        # Delays
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Pausa mín (s):"))
-        self.spin_min_delay = QSpinBox()
-        self.spin_min_delay.setRange(5, 300)
-        self.spin_min_delay.setValue(self.config.min_post_delay)
-        row2.addWidget(self.spin_min_delay)
-
-        row2.addWidget(QLabel("Pausa máx (s):"))
-        self.spin_max_delay = QSpinBox()
-        self.spin_max_delay.setRange(5, 600)
-        self.spin_max_delay.setValue(self.config.max_post_delay)
-        row2.addWidget(self.spin_max_delay)
-        params_layout.addLayout(row2)
-
-        # Checkboxes
-        self.chk_dry_run = QCheckBox("Modo Simulación (Dry-Run: no presiona Publicar)")
-        self.chk_dry_run.setStyleSheet("color: #F2C94C; font-weight: 500;")
-        params_layout.addWidget(self.chk_dry_run)
-
-        self.chk_headless = QCheckBox("Ocultar navegador (Headless background)")
-        self.chk_headless.setChecked(self.config.headless)
-        params_layout.addWidget(self.chk_headless)
-
-        self.chk_ignore_history = QCheckBox("Ignorar historial (Volver a publicar en todos)")
-        params_layout.addWidget(self.chk_ignore_history)
-
-        layout.addWidget(grp_params)
+        layout.addWidget(summary_card)
 
         # --- 3. Action Buttons ---
         grp_actions = QGroupBox("🎮 Controles de Ejecución")
@@ -263,9 +275,124 @@ class MainWindow(QMainWindow):
         actions_layout.addWidget(self.btn_single_test)
 
         layout.addWidget(grp_actions)
-        layout.addStretch()
 
         return panel
+
+    # -------------------------------------------------------------------------
+    # Tab 3: Configuration View
+    # -------------------------------------------------------------------------
+    def _build_config_tab(self) -> None:
+        layout = QVBoxLayout(self.tab_config)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+
+        grp_params = QGroupBox("⚙️ Parámetros de Envío y Comportamiento")
+        grp_params.setMaximumWidth(700)
+        params_layout = QVBoxLayout(grp_params)
+        params_layout.setSpacing(16)
+
+        form_layout = QFormLayout()
+        form_layout.setSpacing(12)
+        form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        # Batch Size
+        self.spin_batch_size = QSpinBox()
+        self.spin_batch_size.setRange(1, 100)
+        self.spin_batch_size.setValue(self.config.batch_size)
+        self.spin_batch_size.setMinimumWidth(140)
+        self.spin_batch_size.valueChanged.connect(self._update_config_summary)
+        form_layout.addRow("Tamaño de tanda (grupos por lote):", self.spin_batch_size)
+
+        # Cooldown
+        self.spin_cooldown = QSpinBox()
+        self.spin_cooldown.setRange(5, 7200)
+        self.spin_cooldown.setValue(self.config.batch_cooldown)
+        self.spin_cooldown.setMinimumWidth(140)
+        self.spin_cooldown.setToolTip("Pausa anti-bloqueo entre cada tanda de grupos")
+        self.spin_cooldown.valueChanged.connect(self._update_config_summary)
+        form_layout.addRow("Cooldown entre tandas (segundos):", self.spin_cooldown)
+
+        # Min Delay
+        self.spin_min_delay = QSpinBox()
+        self.spin_min_delay.setRange(5, 300)
+        self.spin_min_delay.setValue(self.config.min_post_delay)
+        self.spin_min_delay.setMinimumWidth(140)
+        self.spin_min_delay.valueChanged.connect(self._update_config_summary)
+        form_layout.addRow("Pausa mínima entre grupos (segundos):", self.spin_min_delay)
+
+        # Max Delay
+        self.spin_max_delay = QSpinBox()
+        self.spin_max_delay.setRange(5, 600)
+        self.spin_max_delay.setValue(self.config.max_post_delay)
+        self.spin_max_delay.setMinimumWidth(140)
+        self.spin_max_delay.valueChanged.connect(self._update_config_summary)
+        form_layout.addRow("Pausa máxima entre grupos (segundos):", self.spin_max_delay)
+
+        params_layout.addLayout(form_layout)
+
+        # Separator
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: #262B33; max-height: 1px;")
+        params_layout.addWidget(line)
+
+        # Checkboxes
+        self.chk_dry_run = QCheckBox("Modo Simulación (Dry-Run: llena el post pero no presiona Publicar)")
+        self.chk_dry_run.setStyleSheet("color: #F2C94C; font-weight: 500;")
+        self.chk_dry_run.toggled.connect(self._update_config_summary)
+        params_layout.addWidget(self.chk_dry_run)
+
+        self.chk_headless = QCheckBox("Ocultar navegador (Ejecutar Chrome en segundo plano / Headless)")
+        self.chk_headless.setChecked(self.config.headless)
+        self.chk_headless.toggled.connect(self._update_config_summary)
+        params_layout.addWidget(self.chk_headless)
+
+        self.chk_ignore_history = QCheckBox("Ignorar historial previo (Volver a publicar en todos los grupos marcados)")
+        self.chk_ignore_history.toggled.connect(self._update_config_summary)
+        params_layout.addWidget(self.chk_ignore_history)
+
+        # Buttons row
+        btn_row = QHBoxLayout()
+        btn_reset = QPushButton("↺ Restaurar Valores por Defecto")
+        btn_reset.clicked.connect(self._reset_default_params)
+        btn_row.addWidget(btn_reset)
+        btn_row.addStretch()
+
+        btn_back = QPushButton("✔ Listo (Volver a Campaña)")
+        btn_back.setObjectName("btn_login")
+        btn_back.clicked.connect(lambda: self.tabs.setCurrentWidget(self.tab_campaign))
+        btn_row.addWidget(btn_back)
+        params_layout.addLayout(btn_row)
+
+        layout.addWidget(grp_params)
+        layout.addStretch()
+
+    def _reset_default_params(self) -> None:
+        self.spin_batch_size.setValue(self.config.batch_size)
+        self.spin_cooldown.setValue(self.config.batch_cooldown)
+        self.spin_min_delay.setValue(self.config.min_post_delay)
+        self.spin_max_delay.setValue(self.config.max_post_delay)
+        self.chk_dry_run.setChecked(False)
+        self.chk_headless.setChecked(self.config.headless)
+        self.chk_ignore_history.setChecked(False)
+        self._update_config_summary()
+
+    def _update_config_summary(self) -> None:
+        if not hasattr(self, "lbl_config_summary"):
+            return
+        mode_text = "Simulación (Dry-Run)" if self.chk_dry_run.isChecked() else "Publicación Real"
+        mode_color = "#F2C94C" if self.chk_dry_run.isChecked() else "#27AE60"
+        summary_html = (
+            f"<b>Tanda:</b> {self.spin_batch_size.value()} | "
+            f"<b>Pausas:</b> {self.spin_min_delay.value()}-{self.spin_max_delay.value()}s | "
+            f"<b>Cooldown:</b> {self.spin_cooldown.value()}s<br>"
+            f"<b>Modo:</b> <span style='color: {mode_color};'>{mode_text}</span>"
+        )
+        if self.chk_headless.isChecked():
+            summary_html += " | Headless"
+        if self.chk_ignore_history.isChecked():
+            summary_html += " | Ignorar historial"
+        self.lbl_config_summary.setText(summary_html)
 
     def _create_right_panel(self) -> QWidget:
         panel = QWidget()
@@ -535,6 +662,9 @@ class MainWindow(QMainWindow):
                 elif st == "PENDING_APPROVAL":
                     status_item.setText("🟡 Aprobación")
                     status_item.setForeground(QColor("#F2C94C"))
+                elif st == "DRY_RUN":
+                    status_item.setText("🔍 Simulado")
+                    status_item.setForeground(QColor("#56CCF2"))
                 elif st == "FAILED":
                     status_item.setText("❌ Falló")
                     status_item.setForeground(QColor("#EB5757"))

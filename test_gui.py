@@ -22,9 +22,23 @@ class TestGuiInitialization(unittest.TestCase):
         win = MainWindow(config)
         try:
             self.assertIsNotNone(win)
-            self.assertGreaterEqual(win.tabs.count(), 2)
+            self.assertEqual(win.tabs.count(), 3)
+            self.assertIsNotNone(win.menuBar())
             self.assertIsNotNone(win.table_groups)
             self.assertIsNotNone(win.btn_start)
+            self.assertIsNotNone(win.lbl_config_summary)
+        finally:
+            win.close()
+            self.app.processEvents()
+
+    def test_config_summary_updates(self) -> None:
+        config = PosterConfig()
+        win = MainWindow(config)
+        try:
+            win.chk_dry_run.setChecked(True)
+            self.assertIn("Simulación (Dry-Run)", win.lbl_config_summary.text())
+            win.chk_dry_run.setChecked(False)
+            self.assertIn("Publicación Real", win.lbl_config_summary.text())
         finally:
             win.close()
             self.app.processEvents()
